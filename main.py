@@ -124,6 +124,8 @@ class RoundedButton(tk.Canvas):
         self.bind('<Enter>', self._on_enter)
         self.bind('<Leave>', self._on_leave)
         self.bind('<Button-1>', self._on_click)
+        # 安全回退：Windows 上 <Configure> 可能时机不对，200ms 后再按真实尺寸重绘一次
+        self.after(200, self._ensure_drawn)
 
     @staticmethod
     def _round_rect_points(x1, y1, x2, y2, r):
@@ -145,14 +147,14 @@ class RoundedButton(tk.Canvas):
                 pts.append(cy + r * math.sin(ang))
         return pts
 
-    def _draw_button(self, bg_color):
+    def _draw_button(self, bg_color, ew=None, eh=None):
         """绘制按钮外观（圆角矩形 + 文字）。"""
         self._current_color = bg_color
         self.delete('all')
-        w = self.winfo_width()
+        w = ew if ew is not None else self.winfo_width()
         if w < 2:
             w = int(self['width'])
-        h = self.winfo_height()
+        h = eh if eh is not None else self.winfo_height()
         if h < 2:
             h = self._height
         if w < 2 or h < 2:
@@ -161,7 +163,7 @@ class RoundedButton(tk.Canvas):
 
         pts = self._round_rect_points(0, 0, w, h, r)
         self._rect_id = self.create_polygon(
-            pts, smooth=False,
+            pts, smooth=True,
             fill=bg_color, outline=self._outline, width=1
         )
 
@@ -174,7 +176,14 @@ class RoundedButton(tk.Canvas):
 
     def _on_configure(self, event):
         """控件映射/尺寸变化时按当前颜色重绘。"""
-        self._draw_button(self._current_color)
+        self._draw_button(self._current_color, event.width, event.height)
+
+    def _ensure_drawn(self):
+        """安全回退：确保按钮已按真实尺寸绘制。"""
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if w > 2 and h > 2:
+            self._draw_button(self._current_color, w, h)
 
     def _on_enter(self, event):
         self._draw_button(self._hover_bg)
