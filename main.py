@@ -357,9 +357,13 @@ class PuzzleSplitterApp:
         panel.pack(side=tk.RIGHT, fill=tk.Y)
         panel.pack_propagate(False)
 
+        # --- 导出卡片：先创建并 pack BOTTOM，防止被 list_card(expand) 挤压 ---
+        export_card = self._make_card(panel)
+        export_card.pack(side=tk.BOTTOM, fill=tk.X, padx=2, pady=(0, 4))
+
         # --- 检测模式卡片 ---
         mode_card = self._make_card(panel)
-        mode_card.pack(fill=tk.X, pady=(0, 10), padx=2)
+        mode_card.pack(side=tk.TOP, fill=tk.X, pady=(0, 10), padx=2)
         inner = tk.Frame(mode_card, bg=C_CARD_BG)
         inner.pack(fill=tk.X, padx=16, pady=14)
 
@@ -444,7 +448,7 @@ class PuzzleSplitterApp:
 
         # --- 分割线列表卡片 ---
         list_card = self._make_card(panel)
-        list_card.pack(fill=tk.BOTH, expand=True, pady=(0, 10), padx=2)
+        list_card.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0, 10), padx=2)
         list_inner = tk.Frame(list_card, bg=C_CARD_BG)
         list_inner.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
 
@@ -492,9 +496,7 @@ class PuzzleSplitterApp:
                                 ).pack(side=tk.LEFT, expand=True,
                                        fill=tk.X, padx=2)
 
-        # --- 导出卡片（确保完整显示）---
-        export_card = self._make_card(panel)
-        export_card.pack(fill=tk.X, padx=2, pady=(0, 4))  # 底部留一点边距
+        # --- 导出卡片内容（export_card 已在前面 pack BOTTOM）---
         export_inner = tk.Frame(export_card, bg=C_CARD_BG)
         export_inner.pack(fill=tk.X, padx=16, pady=12)
 
