@@ -7,6 +7,7 @@ v2 改进：全圆角按钮、优化布局防止截断、Apple设计规范对齐
 
 from __future__ import annotations
 
+import math
 import os
 import threading
 import tkinter.font as tkfont
@@ -66,9 +67,11 @@ def _detect_font() -> str:
 class RoundedButton(tk.Canvas):
     """Apple风格圆角按钮（基于Canvas实现）。
 
-    使用Canvas绘制圆角矩形作为按钮背景，
+    使用Canvas绘制圆角矩形（平直四边 + 圆角）作为按钮背景，
     支持主色(primary)和次要色(secondary)两种样式，
     自带hover高亮效果和点击回调。
+    绑定 <Configure> 在控件映射/尺寸变化时按真实尺寸重绘，
+    避免初始未按实际宽度绘制导致内容不可见。
     """
 
     def __init__(self, parent, text: str, command=None,
@@ -90,11 +93,13 @@ class RoundedButton(tk.Canvas):
             self._fg_color = 'white'
             self._hover_bg = C_BLUE_HOVER
             self._active_bg = C_BLUE_DARK
+            self._outline = C_BLUE_DARK
         else:
             self._bg_color = C_BTN_SEC_BG
             self._fg_color = C_TEXT
             self._hover_bg = C_BTN_SEC_HOVER
             self._active_bg = C_BTN_SEC_DARK
+            self._outline = C_BTN_SEC_DARK
 
         # 估算宽度
         test_label = tk.Label(parent, text=text, font=self._font)
@@ -111,41 +116,53 @@ class RoundedButton(tk.Canvas):
 
         self._rect_id = None
         self._text_id = None
+        self._current_color = self._bg_color
         self._draw_button(self._bg_color)
 
-        # 事件绑定
+        # 事件绑定：<Configure> 用于控件映射/缩放后按真实尺寸重绘
+        self.bind('<Configure>', self._on_configure)
         self.bind('<Enter>', self._on_enter)
         self.bind('<Leave>', self._on_leave)
         self.bind('<Button-1>', self._on_click)
 
-    def _draw_rounded_rect(self, x1, y1, x2, y2, radius, **kwargs):
-        """绘制圆角矩形。"""
-        return self.create_oval(
-            x1, y1, x1 + 2 * radius, y1 + 2 * radius,
-            x2 - 2 * radius, y2 - 2 * radius, x2, y2,
-            x1 + radius, y2 - 2 * radius, x2 - 2 * radius, y2 - 2 * radius,
-            x1 + radius, y1 + 2 * radius, x1 + 2 * radius, y2 - radius,
-            smooth=True, **kwargs
-        )
+    @staticmethod
+    def _round_rect_points(x1, y1, x2, y2, r):
+        """生成圆角矩形的多边形顶点（四角圆弧采样 + 四边直线）。"""
+        r = max(0.0, min(float(r), (x2 - x1) / 2.0, (y2 - y1) / 2.0))
+        pts = []
+        n = 12  # 每个圆角的采样点数，越大越平滑
+        # 四个圆角：(圆心x, 圆心y, 起始角度°)，顺时针：右上→右下→左下→左上
+        corners = [
+            (x2 - r, y1 + r, -90.0),
+            (x2 - r, y2 - r, 0.0),
+            (x1 + r, y2 - r, 90.0),
+            (x1 + r, y1 + r, 180.0),
+        ]
+        for cx, cy, a0 in corners:
+            for i in range(n + 1):
+                ang = math.radians(a0 + 90.0 * i / n)
+                pts.append(cx + r * math.cos(ang))
+                pts.append(cy + r * math.sin(ang))
+        return pts
 
     def _draw_button(self, bg_color):
-        """绘制按钮外观。"""
+        """绘制按钮外观（圆角矩形 + 文字）。"""
+        self._current_color = bg_color
         self.delete('all')
-        w = self.winfo_width() or self['width']
-        h = self.winfo_height() or self._height
+        w = self.winfo_width()
+        if w < 2:
+            w = int(self['width'])
+        h = self.winfo_height()
+        if h < 2:
+            h = self._height
+        if w < 2 or h < 2:
+            return
         r = min(self._radius, h // 2, w // 2)
 
-        # 圆角矩形背景
-        points = [
-            r, 0, w - r, 0,
-            w, r, w, h - r,
-            w - r, h, r, h,
-            0, h - r, 0, r,
-            r, 0  # 闭合
-        ]
+        pts = self._round_rect_points(0, 0, w, h, r)
         self._rect_id = self.create_polygon(
-            points, smooth=True,
-            fill=bg_color, outline=''
+            pts, smooth=False,
+            fill=bg_color, outline=self._outline, width=1
         )
 
         # 文字居中
@@ -154,6 +171,10 @@ class RoundedButton(tk.Canvas):
             text=self._text, fill=self._fg_color,
             font=self._font, anchor='center'
         )
+
+    def _on_configure(self, event):
+        """控件映射/尺寸变化时按当前颜色重绘。"""
+        self._draw_button(self._current_color)
 
     def _on_enter(self, event):
         self._draw_button(self._hover_bg)
@@ -171,7 +192,7 @@ class RoundedButton(tk.Canvas):
         super().config(**kw)
         if 'text' in kw:
             self._text = kw['text']
-            self._draw_button(self._bg_color)
+            self._draw_button(self._current_color)
 
 
 class PuzzleSplitterApp:
